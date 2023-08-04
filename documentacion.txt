@@ -1,0 +1,91 @@
+import { Controller, Post, Body } from '@nestjs/common';
+import { OrdersService } from './orders.service';
+import { Order } from './order.interface';
+import { KafkaService } from '../kafka/kafka.service';
+
+@Controller('orders')
+export class OrdersController {
+  constructor(
+    private readonly ordersService: OrdersService,
+    private readonly kafkaService: KafkaService,
+  ) {}
+
+  @Post()
+  async createOrder(@Body() order: Order): Promise<Order> {
+    const newOrder = await this.ordersService.createOrder(order);
+
+    // Simulate sending a Kafka message to Shipping module
+    await this.kafkaService.publishMessage('shipping-topic', JSON.stringify(newOrder));
+
+    // Simulate sending a Kafka message to Inventory module
+    await this.kafkaService.publishMessage('inventory-topic', JSON.stringify(newOrder));
+
+    return newOrder;
+  }
+
+  // Other methods...
+}
+
+
+///////////////////////////////////////
+
+import { Injectable } from '@nestjs/common';
+import { KafkaService } from '../kafka/kafka.service';
+import { Shipping } from './shipping.interface';
+
+@Injectable()
+export class ShippingService {
+  constructor(private readonly kafkaService: KafkaService) {
+    this.kafkaService.subscribeToTopic('shipping-topic', (message) => {
+      const order: Order = JSON.parse(message);
+      this.updateShippingStatus(order);
+    });
+  }
+
+  async updateShippingStatus(order: Order): Promise<void> {
+    // Simulate updating shipping status based on the order
+    // Update the shipping status in the database or perform other relevant actions
+  }
+
+  // Other methods...
+}
+
+//////////////////////////////////////
+import { Injectable } from '@nestjs/common';
+import { KafkaService } from '../kafka/kafka.service';
+import { Inventory } from './inventory.interface';
+
+@Injectable()
+export class InventoryService {
+  constructor(private readonly kafkaService: KafkaService) {
+    this.kafkaService.subscribeToTopic('inventory-topic', (message) => {
+      const order: Order = JSON.parse(message);
+      this.updateInventory(order);
+    });
+  }
+
+  async updateInventory(order: Order): Promise<void> {
+    // Simulate updating inventory based on the order
+    // Update the inventory quantity in the database or perform other relevant actions
+  }
+
+  // Other methods...
+}
+
+////////////////////////////////
+import { Module } from '@nestjs/common';
+import { MongooseModule } from '@nestjs/mongoose';
+import { ShippingController } from './shipping.controller';
+import { ShippingService } from './shipping.service';
+import { ShippingSchema } from './shipping.schema';
+import { KafkaModule } from '../kafka/kafka.module';
+
+@Module({
+  imports: [
+    MongooseModule.forFeature([{ name: 'Shipping', schema: ShippingSchema }]),
+    KafkaModule, // Importamos el módulo de Kafka para la comunicación asincrónica
+  ],
+  controllers: [ShippingController],
+  providers: [ShippingService],
+})
+export class ShippingModule {}
